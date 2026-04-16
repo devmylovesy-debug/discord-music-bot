@@ -27,3 +27,7 @@ args = "node src/index.js"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[deployment]
+deploymentTarget = "vm"
+run = ["node", "src/index.js"]
