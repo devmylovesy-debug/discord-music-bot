@@ -1,6 +1,7 @@
 const { Client, Collection, GatewayIntentBits, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
@@ -60,6 +61,15 @@ async function registerCommands() {
 async function main() {
   const sodium = require('libsodium-wrappers');
   await sodium.ready;
+
+  const port = process.env.PORT || 3000;
+  http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end('Bot is running!');
+  }).listen(port, () => {
+    console.log(`Health check server running on port ${port}`);
+  });
+
   await registerCommands();
   await client.login(token);
 }
