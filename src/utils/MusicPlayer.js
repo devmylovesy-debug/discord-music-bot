@@ -6,6 +6,7 @@ const {
   entersState,
   joinVoiceChannel,
   getVoiceConnection,
+  NoSubscriberBehavior,
 } = require('@discordjs/voice');
 const playdl = require('play-dl');
 const { EmbedBuilder } = require('discord.js');
@@ -27,7 +28,9 @@ class MusicPlayer {
     this.textChannel = textChannel;
     this.queue = [];
     this.currentSong = null;
-    this.audioPlayer = createAudioPlayer();
+    this.audioPlayer = createAudioPlayer({
+      behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
+    });
     this.volume = 100;
     this.isPlaying = false;
 
@@ -46,10 +49,35 @@ class MusicPlayer {
   }
 
   async join(voiceChannel) {
+    const existing = this.getConnection();
+    if (existing && existing.state.status !== VoiceConnectionStatus.Destroyed) {
+      try {
+        await entersState(existing, VoiceConnectionStatus.Ready, 5_000);
+        return existing;
+      } catch {
+        existing.destroy();
+      }
+    }
+
     const connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: voiceChannel.guild.id,
       adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+      selfDeaf: true,
+      selfMute: false,
+    });
+
+    connection.on(VoiceConnectionStatus.Disconnected, async () => {
+      try {
+        await Promise.race([
+          entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+          entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+        ]);
+      } catch {
+        if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
+          connection.destroy();
+        }
+      }
     });
 
     try {
