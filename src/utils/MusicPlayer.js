@@ -67,6 +67,10 @@ class MusicPlayer {
       selfMute: false,
     });
 
+    connection.on('stateChange', (oldState, newState) => {
+      console.log(`Voice connection: ${oldState.status} -> ${newState.status}`);
+    });
+
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
         await Promise.race([
@@ -82,7 +86,8 @@ class MusicPlayer {
 
     try {
       await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-    } catch {
+    } catch (err) {
+      console.error('Voice connection failed. Final state:', connection.state.status, err.message);
       connection.destroy();
       throw new Error('Failed to join voice channel within 30 seconds.');
     }
