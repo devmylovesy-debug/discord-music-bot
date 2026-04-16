@@ -62,6 +62,12 @@ async function main() {
   const sodium = require('libsodium-wrappers');
   await sodium.ready;
 
+  const playdl = require('play-dl');
+  if (process.env.YOUTUBE_COOKIE) {
+    await playdl.setToken({ youtube: { cookie: process.env.YOUTUBE_COOKIE } });
+    console.log('YouTube cookies configured.');
+  }
+
   const port = process.env.PORT || 3000;
   http.createServer((req, res) => {
     res.writeHead(200);
