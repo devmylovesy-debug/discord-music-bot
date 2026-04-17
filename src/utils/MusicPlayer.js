@@ -7,8 +7,10 @@ const {
   joinVoiceChannel,
   getVoiceConnection,
   NoSubscriberBehavior,
+  StreamType,
 } = require('@discordjs/voice');
 const playdl = require('play-dl');
+const ytdl = require('youtube-dl-exec');
 const { EmbedBuilder } = require('discord.js');
 
 class Song {
@@ -99,32 +101,25 @@ class MusicPlayer {
   async addSong(query, requestedBy) {
     let songInfo;
 
-    if (playdl.yt_validate(query) === 'video') {
-      const info = await playdl.video_info(query);
-      const details = info.video_details;
-      songInfo = new Song({
-        title: details.title,
-        url: details.url,
-        duration: formatDuration(details.durationInSec),
-        durationSec: details.durationInSec || 0,
-        thumbnail: details.thumbnails?.[0]?.url || null,
-        requestedBy,
-      });
-    } else {
+    const isUrl = playdl.yt_validate(query) === 'video';
+    const url = isUrl ? query : await (async () => {
       const results = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
-      if (!results || results.length === 0) {
-        throw new Error('No results found for your search query.');
-      }
-      const video = results[0];
-      songInfo = new Song({
-        title: video.title,
-        url: video.url,
-        duration: formatDuration(video.durationInSec),
-        durationSec: video.durationInSec || 0,
-        thumbnail: video.thumbnails?.[0]?.url || null,
-        requestedBy,
-      });
-    }
+      if (!results || results.length === 0) throw new Error('No results found for your search query.');
+      return results[0].url;
+    })();
+
+    const ytdlArgs = { dumpSingleJson: true, noWarnings: true, skipDownload: true };
+    if (process.env.YOUTUBE_COOKIE) ytdlArgs['add-header'] = `Cookie: ${process.env.YOUTUBE_COOKIE}`;
+
+    const info = await ytdl(url, ytdlArgs);
+    songInfo = new Song({
+      title: info.title,
+      url: info.webpage_url || url,
+      duration: formatDuration(info.duration),
+      durationSec: info.duration || 0,
+      thumbnail: info.thumbnail || null,
+      requestedBy,
+    });
 
     this.queue.push(songInfo);
     return songInfo;
@@ -156,9 +151,16 @@ class MusicPlayer {
     this.songStartedAt = Date.now();
 
     try {
-      const stream = await playdl.stream(this.currentSong.url, { quality: 2 });
-      const resource = createAudioResource(stream.stream, {
-        inputType: stream.type,
+      const ytdlArgs = {
+        output: '-',
+        format: 'bestaudio',
+        quiet: true,
+      };
+      if (process.env.YOUTUBE_COOKIE) ytdlArgs['add-header'] = `Cookie: ${process.env.YOUTUBE_COOKIE}`;
+
+      const ytProcess = ytdl.raw(this.currentSong.url, ytdlArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
+      const resource = createAudioResource(ytProcess.stdout, {
+        inputType: StreamType.Arbitrary,
         inlineVolume: true,
       });
 
