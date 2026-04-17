@@ -10,7 +10,7 @@ const {
   StreamType,
 } = require('@discordjs/voice');
 const playdl = require('play-dl');
-const ytdl = require('youtube-dl-exec');
+const ytdl = require('@distube/ytdl-core');
 const { EmbedBuilder } = require('discord.js');
 
 class Song {
@@ -108,16 +108,19 @@ class MusicPlayer {
       return results[0].url;
     })();
 
-    const ytdlArgs = { dumpSingleJson: true, noWarnings: true, skipDownload: true };
-    if (process.env.YOUTUBE_COOKIE) ytdlArgs['add-header'] = `Cookie: ${process.env.YOUTUBE_COOKIE}`;
+    const ytdlOptions = {};
+    if (process.env.YOUTUBE_COOKIE) {
+      ytdlOptions.requestOptions = { headers: { cookie: process.env.YOUTUBE_COOKIE } };
+    }
 
-    const info = await ytdl(url, ytdlArgs);
+    const info = await ytdl.getInfo(url, ytdlOptions);
+    const details = info.videoDetails;
     songInfo = new Song({
-      title: info.title,
-      url: info.webpage_url || url,
-      duration: formatDuration(info.duration),
-      durationSec: info.duration || 0,
-      thumbnail: info.thumbnail || null,
+      title: details.title,
+      url: details.video_url || url,
+      duration: formatDuration(parseInt(details.lengthSeconds)),
+      durationSec: parseInt(details.lengthSeconds) || 0,
+      thumbnail: details.thumbnails?.[0]?.url || null,
       requestedBy,
     });
 
@@ -151,15 +154,17 @@ class MusicPlayer {
     this.songStartedAt = Date.now();
 
     try {
-      const ytdlArgs = {
-        output: '-',
-        format: 'bestaudio',
-        quiet: true,
+      const ytdlOptions = {
+        filter: 'audioonly',
+        quality: 'highestaudio',
+        highWaterMark: 1 << 25,
       };
-      if (process.env.YOUTUBE_COOKIE) ytdlArgs['add-header'] = `Cookie: ${process.env.YOUTUBE_COOKIE}`;
+      if (process.env.YOUTUBE_COOKIE) {
+        ytdlOptions.requestOptions = { headers: { cookie: process.env.YOUTUBE_COOKIE } };
+      }
 
-      const ytProcess = ytdl.raw(this.currentSong.url, ytdlArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
-      const resource = createAudioResource(ytProcess.stdout, {
+      const stream = ytdl(this.currentSong.url, ytdlOptions);
+      const resource = createAudioResource(stream, {
         inputType: StreamType.Arbitrary,
         inlineVolume: true,
       });
